@@ -157,8 +157,10 @@ public class DocumentController {
         LogUtils.PerformanceMonitor monitor = LogUtils.startPerformanceMonitor("GET_USER_UPLOADED_FILES");
         try {
             LogUtils.logBusiness("GET_USER_UPLOADED_FILES", userId, "接收到获取用户上传文件请求");
-            
+
+            // 获取当前用户上传的知识库以及公共知识库以及标签为当前用户的知识库
             List<FileUpload> files = documentService.getUserUploadedFiles(userId);
+
             
             // 将FileUpload转换为包含tagName的DTO
             List<Map<String, Object>> fileData = files.stream().map(file -> {
@@ -345,8 +347,7 @@ public class DocumentController {
             try {
                 var authentication = SecurityContextHolder.getContext().getAuthentication();
                 if (authentication != null && authentication.isAuthenticated() 
-                    && authentication.getPrincipal() instanceof UserDetails) {
-                    UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+                    && authentication.getPrincipal() instanceof UserDetails userDetails) {
                     userId = userDetails.getUsername();
                     // 从userDetails中获取组织标签信息
                     orgTags = userDetails.getAuthorities().stream()

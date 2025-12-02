@@ -23,8 +23,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
 /**
  * 文档管理服务类
@@ -138,7 +137,33 @@ public class DocumentService {
     public List<FileUpload> getUserUploadedFiles(String userId) {
         logger.info("获取用户上传的文件列表: userId={}", userId);
         try {
-            return fileUploadRepository.findByUserId(userId);
+            Optional<User> userOptional = userRepository.findById(Long.valueOf(userId));
+
+            // 确保用户存在，否则可能抛出 NoSuchElementException
+            if (userOptional.isEmpty()) {
+                logger.warn("用户不存在: userId={}", userId);
+                return Collections.emptyList(); // 返回空列表
+            }
+            User user = userOptional.get();
+
+            // 1. 获取通过组织标签和ID查询到的文件列表
+            List<FileUpload> filesByOrgAndId = fileUploadRepository.findByOrgTagOrId(user.getOrgTags(), Long.valueOf(userId));
+
+            // 2. 获取通过用户ID或公开查询到的文件列表
+            List<FileUpload> filesByUserIdOrPublic = fileUploadRepository.findByUserIdOrIsPublicTrue(userId);
+
+            // 3. 创建一个 HashSet，用于自动去重 (假设 FileUpload 正确重写了 equals() 和 hashCode())
+            Set<FileUpload> uniqueFiles = new HashSet<>();
+
+            // 4. 添加第一个列表的所有元素
+            uniqueFiles.addAll(filesByOrgAndId);
+
+            // 5. 添加第二个列表的所有元素，Set会自动过滤掉重复项
+            uniqueFiles.addAll(filesByUserIdOrPublic);
+
+            // 6. 将去重后的 Set 转换回 List 并返回
+            return new ArrayList<>(uniqueFiles);
+
         } catch (Exception e) {
             logger.error("获取用户上传的文件列表失败: userId={}", userId, e);
             throw new RuntimeException("获取用户上传的文件列表失败: " + e.getMessage(), e);
