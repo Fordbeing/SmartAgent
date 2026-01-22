@@ -22,13 +22,13 @@ public class EmbeddingClient {
 
     @Value("${embedding.api.model}")
     private String modelId;
-    
+
     @Value("${embedding.api.batch-size:100}")
     private int batchSize;
 
     @Value("${embedding.api.dimension:2048}")
     private int dimension;
-    
+
     private static final Logger logger = LoggerFactory.getLogger(EmbeddingClient.class);
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
@@ -40,13 +40,14 @@ public class EmbeddingClient {
 
     /**
      * 调用通义千问 API 生成向量
+     * 
      * @param texts 输入文本列表
      * @return 对应的向量列表
      */
     public List<float[]> embed(List<String> texts) {
         try {
             logger.info("开始生成向量，文本数量: {}", texts.size());
-            
+
             List<float[]> all = new ArrayList<>(texts.size());
             for (int start = 0; start < texts.size(); start += batchSize) {
                 int end = Math.min(start + batchSize, texts.size());
@@ -67,8 +68,8 @@ public class EmbeddingClient {
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("model", modelId);
         requestBody.put("input", batch);
-        requestBody.put("dimension", dimension);  // 直接在根级别设置dimension
-        requestBody.put("encoding_format", "float");  // 添加编码格式
+        requestBody.put("dimension", dimension); // 设置向量维度，需与ES映射一致
+        requestBody.put("encoding_format", "float"); // 添加编码格式
 
         return webClient.post()
                 .uri("/embeddings")
@@ -82,11 +83,11 @@ public class EmbeddingClient {
 
     private List<float[]> parseVectors(String response) throws Exception {
         JsonNode jsonNode = objectMapper.readTree(response);
-        JsonNode data = jsonNode.get("data");  // 兼容模式下使用data字段
+        JsonNode data = jsonNode.get("data"); // 兼容模式下使用data字段
         if (data == null || !data.isArray()) {
             throw new RuntimeException("API 响应格式错误: data 字段不存在或不是数组");
         }
-        
+
         List<float[]> vectors = new ArrayList<>();
         for (JsonNode item : data) {
             JsonNode embedding = item.get("embedding");

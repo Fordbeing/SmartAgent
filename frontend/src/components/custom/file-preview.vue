@@ -35,7 +35,16 @@
         </div>
       </template>
       <template v-else>
-        <div class="content-wrapper">
+        <!-- PDF预览使用iframe -->
+        <div v-if="isPdf && pdfUrl" class="pdf-preview-wrapper">
+          <iframe 
+            :src="pdfUrl" 
+            class="pdf-iframe"
+            title="PDF预览"
+          />
+        </div>
+        <!-- 文本预览 -->
+        <div v-else class="content-wrapper">
           <pre class="preview-text">{{ content }}</pre>
         </div>
       </template>
@@ -44,7 +53,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { NButton, NSpin } from 'naive-ui';
 import SvgIcon from '@/components/custom/svg-icon.vue';
 import { request } from '@/service/request';
@@ -65,7 +74,14 @@ const emit = defineEmits<Emits>();
 const loading = ref(false);
 const downloading = ref(false);
 const content = ref('');
+const pdfUrl = ref('');
 const error = ref('');
+
+// 判断是否为PDF文件
+const isPdf = computed(() => {
+  const ext = getFileExt(props.fileName);
+  return ext?.toLowerCase() === 'pdf';
+});
 
 // 获取文件图标
 function getFileIcon(fileName: string) {
@@ -88,6 +104,9 @@ watch(() => props.fileName, async (newFileName) => {
 watch(() => props.visible, async (visible) => {
   if (visible && props.fileName) {
     await loadPreviewContent();
+  } else if (!visible) {
+    // 关闭预览时清理PDF URL
+    pdfUrl.value = '';
   }
 });
 
@@ -98,25 +117,49 @@ async function loadPreviewContent() {
   loading.value = true;
   error.value = '';
   content.value = '';
+  pdfUrl.value = '';
   
   try {
     const token = localStorage.getItem('token');
-    const { error: requestError, data } = await request<{
-      fileName: string;
-      content: string;
-      fileSize: number;
-    }>({
-      url: '/documents/preview',
-      params: {
-        fileName: props.fileName,
-        token: token || undefined
-      }
-    });
     
-    if (requestError) {
-      error.value = '预览失败：' + (requestError.message || '未知错误');
-    } else if (data) {
-      content.value = data.content;
+    // 如果是PDF文件，获取PDF URL用于iframe预览
+    if (isPdf.value) {
+      const { error: requestError, data } = await request<{
+        fileName: string;
+        pdfUrl: string;
+        fileSize: number;
+      }>({
+        url: '/documents/pdf-url',
+        params: {
+          fileName: props.fileName,
+          token: token || undefined
+        }
+      });
+      
+      if (requestError) {
+        error.value = '预览失败：' + (requestError.message || '未知错误');
+      } else if (data) {
+        pdfUrl.value = data.pdfUrl;
+      }
+    } else {
+      // 非PDF文件，获取文本内容预览
+      const { error: requestError, data } = await request<{
+        fileName: string;
+        content: string;
+        fileSize: number;
+      }>({
+        url: '/documents/preview',
+        params: {
+          fileName: props.fileName,
+          token: token || undefined
+        }
+      });
+      
+      if (requestError) {
+        error.value = '预览失败：' + (requestError.message || '未知错误');
+      } else if (data) {
+        content.value = data.content;
+      }
     }
   } catch (err: any) {
     error.value = '预览失败：' + (err.message || '网络错误');
@@ -190,6 +233,17 @@ function closePreview() {
       font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
       line-height: 1.5;
       margin: 0;
+    }
+    
+    .pdf-preview-wrapper {
+      @apply h-full w-full;
+      
+      .pdf-iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+        min-height: 500px;
+      }
     }
   }
 }

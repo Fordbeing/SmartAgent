@@ -17,6 +17,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -78,8 +82,7 @@ public class DocumentService {
                         RemoveObjectArgs.builder()
                                 .bucket("uploads")
                                 .object(objectName)
-                                .build()
-                );
+                                .build());
                 logger.info("成功从MinIO删除文件: {}", objectName);
             } catch (Exception e) {
                 logger.error("从MinIO删除文件时出错: {}", fileMd5, e);
@@ -115,8 +118,13 @@ public class DocumentService {
                     .orElseThrow(() -> new RuntimeException("用户不存在: " + userId));
 
             List<String> userEffectiveTags = orgTagCacheService.getUserEffectiveOrgTags(user.getUsername());
+            String userPrimaryTag = orgTagCacheService.getUserPrimaryOrg(user.getUsername());
+            if (StringUtils.hasText(userPrimaryTag)) {
+                userEffectiveTags.add(userPrimaryTag);
+            }
 
             List<FileUpload> files;
+
             if (userEffectiveTags.isEmpty()) {
                 files = fileUploadRepository.findByUserIdOrIsPublicTrue(userId);
             } else {
@@ -147,7 +155,8 @@ public class DocumentService {
             User user = userOptional.get();
 
             // 1. 获取通过组织标签和ID查询到的文件列表
-            List<FileUpload> filesByOrgAndId = fileUploadRepository.findByOrgTagOrId(user.getOrgTags(), Long.valueOf(userId));
+            List<FileUpload> filesByOrgAndId = fileUploadRepository.findByOrgTagOrId(user.getOrgTags(),
+                    Long.valueOf(userId));
 
             // 2. 获取通过用户ID或公开查询到的文件列表
             List<FileUpload> filesByUserIdOrPublic = fileUploadRepository.findByUserIdOrIsPublicTrue(userId);
@@ -188,8 +197,7 @@ public class DocumentService {
                             .bucket("uploads")
                             .object(objectName)
                             .expiry(3600)
-                            .build()
-            );
+                            .build());
         } catch (Exception e) {
             logger.error("生成文件下载链接失败: fileMd5={}", fileMd5, e);
             return null;
@@ -213,15 +221,19 @@ public class DocumentService {
                             .object(objectName)
                             .build())) {
 
-                // 1. 如果是 docx 文件，使用 POI 解析
-                if ("docx".equals(fileExtension)) {
+                // 1. 如果是 PDF 文件，使用 PDFBox 解析
+                if ("pdf".equals(fileExtension)) {
+                    return readPdfContent(inputStream);
+                }
+                // 2. 如果是 docx 文件，使用 POI 解析
+                else if ("docx".equals(fileExtension)) {
                     return readDocxContent(inputStream);
                 }
-                // 2. 如果是纯文本文件，使用字符流读取
+                // 3. 如果是纯文本文件，使用字符流读取
                 else if (isTextFile(fileExtension)) {
                     return readPlainContent(inputStream);
                 }
-                // 3. 其他二进制文件 (doc, pdf, xlsx, images等)，返回元数据
+                // 4. 其他二进制文件 (doc, xlsx, images等)，返回元数据
                 else {
                     return getNoPreviewMessage(fileMd5, fileName, fileExtension);
                 }
@@ -234,11 +246,29 @@ public class DocumentService {
     }
 
     /**
+     * 解析 PDF 文件内容
+     */
+    private String readPdfContent(InputStream inputStream) {
+        try (PDDocument document = PDDocument.load(inputStream)) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            String text = stripper.getText(document);
+            // 限制预览长度，避免过大
+            if (text.length() > 5000) {
+                return text.substring(0, 5000) + "\n\n... (文档过长，仅展示前5000字)";
+            }
+            return text;
+        } catch (IOException e) {
+            logger.error("解析PDF文件失败", e);
+            return "PDF文档解析失败，可能文件已损坏或加密。";
+        }
+    }
+
+    /**
      * 解析 Word (.docx) 文件内容
      */
     private String readDocxContent(InputStream inputStream) {
         try (XWPFDocument document = new XWPFDocument(inputStream);
-             XWPFWordExtractor extractor = new XWPFWordExtractor(document)) {
+                XWPFWordExtractor extractor = new XWPFWordExtractor(document)) {
 
             String text = extractor.getText();
             // 限制预览长度，避免过大
@@ -281,7 +311,9 @@ public class DocumentService {
         try {
             FileUpload fileUpload = fileUploadRepository.findByFileMd5(fileMd5).orElse(null);
             String sizeStr = (fileUpload != null) ? formatFileSize(fileUpload.getTotalSize()) : "未知";
-            String timeStr = (fileUpload != null && fileUpload.getCreatedAt() != null) ? fileUpload.getCreatedAt().toString() : "未知";
+            String timeStr = (fileUpload != null && fileUpload.getCreatedAt() != null)
+                    ? fileUpload.getCreatedAt().toString()
+                    : "未知";
 
             return String.format(
                     "文件名: %s\n" +
@@ -289,8 +321,7 @@ public class DocumentService {
                             "文件类型: %s\n" +
                             "上传时间: %s\n\n" +
                             "此文件格式 (%s) 不支持在线文本预览，请下载后查看。",
-                    fileName, sizeStr, ext.toUpperCase(), timeStr, ext
-            );
+                    fileName, sizeStr, ext.toUpperCase(), timeStr, ext);
         } catch (Exception e) {
             return "此文件不支持预览，且无法获取文件详情。";
         }
@@ -327,7 +358,8 @@ public class DocumentService {
      * 格式化文件大小
      */
     private String formatFileSize(Long size) {
-        if (size == null) return "0 B";
+        if (size == null)
+            return "0 B";
 
         if (size < 1024) {
             return size + " B";

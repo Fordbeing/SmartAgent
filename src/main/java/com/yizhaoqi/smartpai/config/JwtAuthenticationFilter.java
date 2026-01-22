@@ -42,7 +42,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (token != null) {
                 String newToken = null;
                 String username = null;
-                
+
                 // 首先检查token是否有效
                 if (jwtUtils.validateToken(token)) {
                     // Token有效，检查是否需要预刷新
@@ -63,12 +63,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         }
                     }
                 }
-                
+
                 // 如果有新token，通过响应头返回给前端
                 if (newToken != null) {
                     response.setHeader("New-Token", newToken);
                 }
-                
+
                 // 设置用户认证信息
                 if (username != null && !username.isEmpty()) {
                     UserDetails userDetails = userDetailsService.loadUserByUsername(username);

@@ -8,9 +8,7 @@
         "type": "integer"
       },
       "textContent": {
-        "type": "text",
-        "analyzer": "ik_max_word",
-        "search_analyzer": "ik_smart"
+        "type": "text"
       },
       "vector": {
         "type": "dense_vector",

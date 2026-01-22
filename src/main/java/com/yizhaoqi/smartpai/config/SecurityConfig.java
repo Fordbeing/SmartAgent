@@ -10,6 +10,11 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import java.util.Arrays;
+import java.util.Collections;
 
 /**
  * 配置Spring Security的类
@@ -24,7 +29,7 @@ public class SecurityConfig {
 
     @Autowired
     private JwtAuthenticationFilter jwtAuthenticationFilter;
-    
+
     @Autowired
     private OrgTagAuthorizationFilter orgTagAuthorizationFilter;
 
@@ -41,10 +46,14 @@ public class SecurityConfig {
         try {
             // 禁用CSRF保护
             http.csrf(csrf -> csrf.disable())
+                    // 启用 CORS
+                    .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                     // 配置请求的授权规则
                     .authorizeHttpRequests(authorize -> authorize
                             // 允许静态资源访问
-                            .requestMatchers("/", "/test.html", "/static/test.html", "/static/**", "/*.js", "/*.css", "/*.ico").permitAll()
+                            .requestMatchers("/", "/test.html", "/static/test.html", "/static/**", "/*.js", "/*.css",
+                                    "/*.ico")
+                            .permitAll()
                             // 允许 WebSocket 连接
                             .requestMatchers("/chat/**", "/ws/**").permitAll()
                             // 允许登录注册接口
@@ -52,7 +61,9 @@ public class SecurityConfig {
                             // 允许测试接口
                             .requestMatchers("/api/v1/test/**").permitAll()
                             // 文件上传和下载相关接口 - 普通用户和管理员都可访问
-                            .requestMatchers("/api/v1/upload/**", "/api/v1/parse", "/api/v1/documents/download", "/api/v1/documents/preview").hasAnyRole("USER", "ADMIN")
+                            .requestMatchers("/api/v1/upload/**", "/api/v1/parse", "/api/v1/documents/download",
+                                    "/api/v1/documents/preview")
+                            .hasAnyRole("USER", "ADMIN")
                             // 对话历史相关接口 - 用户只能查看自己的历史，管理员可以查看所有
                             .requestMatchers("/api/v1/users/conversation/**").hasAnyRole("USER", "ADMIN")
                             // 搜索接口 - 普通用户和管理员都可访问
@@ -85,5 +96,26 @@ public class SecurityConfig {
             throw e;
         }
     }
-}
 
+    /**
+     * CORS 配置源
+     * 允许前端跨域访问
+     */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        // 允许的源: 本地开发, 服务器IP, 任意端口
+        // 注意: 生产环境建议指定具体域名
+        configuration.setAllowedOriginPatterns(Collections.singletonList("*"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Requested-With", "Accept",
+                "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"));
+        configuration.setExposedHeaders(Arrays.asList("Authorization"));
+        configuration.setAllowCredentials(true); // 允许携带 Cookie
+        configuration.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+}

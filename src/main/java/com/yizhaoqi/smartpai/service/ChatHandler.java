@@ -45,8 +45,8 @@ public class ChatHandler {
     private final Map<String, Boolean> stopFlags = new ConcurrentHashMap<>();
 
     public ChatHandler(RedisTemplate<String, String> redisTemplate,
-                       HybridSearchService searchService,
-                       DeepSeekClient deepSeekClient) {
+            HybridSearchService searchService,
+            DeepSeekClient deepSeekClient) {
         this.redisTemplate = redisTemplate;
         this.searchService = searchService;
         this.deepSeekClient = deepSeekClient;
@@ -76,6 +76,7 @@ public class ChatHandler {
 
             // 4. 构建上下文
             String context = buildContext(searchResults);
+            logger.info("构建的上下文内容: {}", context); // 添加日志确认上下文
 
             // 5. 调用 DeepSeek API 并处理流式响应
             logger.info("调用DeepSeek API生成回复");
@@ -246,8 +247,9 @@ public class ChatHandler {
                 return new ArrayList<>();
             }
 
-            List<Map<String, String>> history = objectMapper.readValue(json, new TypeReference<List<Map<String, String>>>() {
-            });
+            List<Map<String, String>> history = objectMapper.readValue(json,
+                    new TypeReference<List<Map<String, String>>>() {
+                    });
             logger.debug("读取到会话 {} 的 {} 条历史记录", conversationId, history.size());
             return history;
         } catch (JsonProcessingException e) {
@@ -261,7 +263,8 @@ public class ChatHandler {
         List<Map<String, String>> history = getConversationHistory(conversationId);
 
         // 获取当前时间戳
-        String currentTimestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
+        String currentTimestamp = java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
 
         // 添加用户消息（带时间戳）
         Map<String, String> userMsgMap = new HashMap<>();
@@ -337,8 +340,7 @@ public class ChatHandler {
                     "status", "finished",
                     "message", "响应已完成",
                     "timestamp", currentTime,
-                    "date", java.time.LocalDateTime.now().toString()
-            );
+                    "date", java.time.LocalDateTime.now().toString());
             String notificationJson = objectMapper.writeValueAsString(notification);
             logger.info("发送完成通知到会话 {}: {}", session.getId(), notificationJson);
             session.sendMessage(new TextMessage(notificationJson));
@@ -378,8 +380,7 @@ public class ChatHandler {
                     "type", "stop",
                     "message", "响应已停止",
                     "timestamp", currentTime,
-                    "date", java.time.Instant.ofEpochMilli(currentTime).toString()
-            );
+                    "date", java.time.Instant.ofEpochMilli(currentTime).toString());
             String stopJson = objectMapper.writeValueAsString(response);
             logger.info("发送停止确认到会话 {}: {}", sessionId, stopJson);
             session.sendMessage(new TextMessage(stopJson));
